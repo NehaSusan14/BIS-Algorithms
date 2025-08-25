@@ -1,0 +1,139 @@
+import random
+
+# ----------------------------- #
+#       GEP CONFIGURATION       #
+# ----------------------------- #
+FUNCTIONS = ['+', '-', '*', '/']
+TERMINALS = ['rainfall', 'temperature', 'soil_pH', 'fertilizer']
+CONSTANTS = [str(round(random.uniform(0.1, 10), 1)) for _ in range(5)]
+
+GENE_LENGTH = 7
+POPULATION_SIZE = 20
+GENERATIONS = 30
+MUTATION_RATE = 0.2
+CROSSOVER_RATE = 0.7
+
+# ----------------------------- #
+#      1. INITIAL POPULATION    #
+# ----------------------------- #
+def initialize_population():
+    population = []
+    symbols = FUNCTIONS + TERMINALS + CONSTANTS
+    for _ in range(POPULATION_SIZE):
+        gene = [random.choice(symbols) for _ in range(GENE_LENGTH)]
+        population.append(gene)
+    return population
+
+# ----------------------------- #
+#      2. GENE TO EXPRESSION    #
+# ----------------------------- #
+def gene_to_expression(gene):
+    return ' '.join(gene)
+
+# ----------------------------- #
+#     3. EXPRESSION EVALUATION  #
+# ----------------------------- #
+def evaluate_expression(expr, features):
+    try:
+        # Replace variable names with actual values
+        for var, val in features.items():
+            expr = expr.replace(var, str(val))
+        # Safe division (crude)
+        expr = expr.replace('/', '/1e-5 + ')
+        return eval(expr)
+    except:
+        return float('inf')
+
+# ----------------------------- #
+#        4. FITNESS FUNCTION     #
+# ----------------------------- #
+def evaluate_fitness(gene, data):
+    expr = gene_to_expression(gene)
+    total_error = 0
+    for features, actual_yield in data:
+        predicted = evaluate_expression(expr, features)
+        total_error += abs(predicted - actual_yield)
+    return total_error  # Lower is better
+
+# ----------------------------- #
+#         5. SELECTION          #
+# ----------------------------- #
+def select_parents(population, fitnesses, num_parents=10):
+    # Tournament selection
+    selected = []
+    for _ in range(num_parents):
+        i1, i2 = random.sample(range(len(population)), 2)
+        winner = population[i1] if fitnesses[i1] < fitnesses[i2] else population[i2]
+        selected.append(winner)
+    return selected
+
+# ----------------------------- #
+#         6. CROSSOVER          #
+# ----------------------------- #
+def crossover(parent1, parent2):
+    if random.random() > CROSSOVER_RATE:
+        return parent1[:], parent2[:]
+    point = random.randint(1, GENE_LENGTH - 2)
+    child1 = parent1[:point] + parent2[point:]
+    child2 = parent2[:point] + parent1[point:]
+    return child1, child2
+
+# ----------------------------- #
+#          7. MUTATION          #
+# ----------------------------- #
+def mutate(gene):
+    symbols = FUNCTIONS + TERMINALS + CONSTANTS
+    for i in range(len(gene)):
+        if random.random() < MUTATION_RATE:
+            gene[i] = random.choice(symbols)
+    return gene
+
+# ----------------------------- #
+#         8. MAIN GEP LOOP      #
+# ----------------------------- #
+def run_gep(data):
+    population = initialize_population()
+
+    for generation in range(GENERATIONS):
+        fitnesses = [evaluate_fitness(gene, data) for gene in population]
+        best_gene = min(population, key=lambda g: evaluate_fitness(g, data))
+        best_fitness = evaluate_fitness(best_gene, data)
+
+        print(f"Gen {generation}: Best Expr = {gene_to_expression(best_gene)}, Error = {best_fitness:.4f}")
+
+        if best_fitness < 0.01:
+            break
+
+        # Selection
+        parents = select_parents(population, fitnesses)
+
+        # Generate new population
+        new_population = []
+        while len(new_population) < POPULATION_SIZE:
+            p1, p2 = random.sample(parents, 2)
+            c1, c2 = crossover(p1[:], p2[:])
+            new_population.append(mutate(c1))
+            if len(new_population) < POPULATION_SIZE:
+                new_population.append(mutate(c2))
+
+        population = new_population
+
+    return gene_to_expression(best_gene)
+
+# ----------------------------- #
+#           9. DATA             #
+# ----------------------------- #
+# Toy dataset: (features, actual_yield)
+data = [
+    ({'rainfall': 100, 'temperature': 25, 'soil_pH': 6.5, 'fertilizer': 50}, 3.2),
+    ({'rainfall': 80,  'temperature': 22, 'soil_pH': 6.8, 'fertilizer': 40}, 2.8),
+    ({'rainfall': 120, 'temperature': 27, 'soil_pH': 6.0, 'fertilizer': 60}, 3.5),
+    ({'rainfall': 90,  'temperature': 24, 'soil_pH': 6.7, 'fertilizer': 55}, 3.0),
+]
+
+# ----------------------------- #
+#         10. EXECUTION         #
+# ----------------------------- #
+if __name__ == "__main__":
+    best_model = run_gep(data)
+    print("\nBest model found:", best_model)
