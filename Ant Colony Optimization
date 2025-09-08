@@ -1,0 +1,81 @@
+import numpy as np
+import random
+
+# Parameters
+NUM_CITIES = 5
+NUM_ANTS = 10
+NUM_ITERATIONS = 100
+ALPHA = 1           # Importance of pheromone
+BETA = 5            # Importance of heuristic (1/distance)
+RHO = 0.5           # Evaporation rate
+Q = 100             # Constant for pheromone update
+
+# Distance matrix (symmetric)
+distance_matrix = np.array([
+    [0, 2, 2, 5, 7],
+    [2, 0, 4, 8, 2],
+    [2, 4, 0, 1, 3],
+    [5, 8, 1, 0, 2],
+    [7, 2, 3, 2, 0]
+])
+
+# Initialize pheromone levels
+pheromone = np.ones((NUM_CITIES, NUM_CITIES))
+
+# Heuristic information (inverse of distance)
+heuristic = 1 / (distance_matrix + np.diag([np.inf]*NUM_CITIES))  # Avoid div by zero
+
+best_cost = float('inf')
+best_path = []
+
+def select_next_city(pheromone, heuristic, current_city, unvisited):
+    probabilities = []
+    for city in unvisited:
+        pher = pheromone[current_city][city] ** ALPHA
+        heur = heuristic[current_city][city] ** BETA
+        probabilities.append(pher * heur)
+
+    total = sum(probabilities)
+    probabilities = [p / total for p in probabilities]
+    return random.choices(unvisited, weights=probabilities, k=1)[0]
+
+# Main ACO loop
+for iteration in range(NUM_ITERATIONS):
+    all_paths = []
+    all_costs = []
+
+    for ant in range(NUM_ANTS):
+        visited = []
+        current_city = random.randint(0, NUM_CITIES - 1)
+        visited.append(current_city)
+
+        while len(visited) < NUM_CITIES:
+            unvisited = list(set(range(NUM_CITIES)) - set(visited))
+            next_city = select_next_city(pheromone, heuristic, current_city, unvisited)
+            visited.append(next_city)
+            current_city = next_city
+
+        visited.append(visited[0])  # Return to starting city
+        cost = sum(distance_matrix[visited[i]][visited[i+1]] for i in range(NUM_CITIES))
+        
+        all_paths.append(visited)
+        all_costs.append(cost)
+
+        if cost < best_cost:
+            best_cost = cost
+            best_path = visited
+
+    # Pheromone evaporation
+    pheromone *= (1 - RHO)
+
+    # Pheromone update (deposit)
+    for path, cost in zip(all_paths, all_costs):
+        for i in range(NUM_CITIES):
+            a = path[i]
+            b = path[i+1]
+            pheromone[a][b] += Q / cost
+            pheromone[b][a] += Q / cost  # Since TSP is symmetric
+
+# Output best result
+print("Best Path Found:", best_path)
+print("Minimum Cost:", best_cost)
