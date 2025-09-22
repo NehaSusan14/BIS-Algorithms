@@ -1,0 +1,66 @@
+import numpy as np
+import random
+
+# Define the problem: N jobs, M machines
+N = 5  # Number of jobs
+M = 3  # Number of machines
+job_times = np.array([[2, 3, 5], [3, 2, 4], [4, 6, 2], [3, 4, 3], [5, 7, 2]])  # job times on each machine
+
+# Fitness function: Calculate the makespan (total time of the last job to finish)
+def calculate_makespan(schedule):
+    machine_times = np.zeros(M)
+    for job in range(N):
+        machine = int(schedule[job])  # Machine to which job is assigned
+        machine_times[machine] += job_times[job][machine]
+    return max(machine_times)  # Makespan is the maximum time across machines
+
+# Cuckoo Search Algorithm Parameters
+nests = 10  # Number of nests
+max_iter = 100  # Max iterations
+p_a = 0.25  # Probability of discovery (probability of replacing a nest)
+
+# Initialize nests randomly (job assignments to machines)
+def initialize_nests():
+    nests = []
+    for i in range(nests):
+        # Randomly assign jobs to machines (machine numbers between 0 and M-1)
+        schedule = np.random.randint(0, M, N)
+        nests.append(schedule)
+    return nests
+
+# Levy Flight: Generate a new solution by perturbing the current solution
+def levy_flight(nest, beta=1.5):
+    new_nest = nest.copy()
+    for i in range(N):
+        step = np.random.normal(0, 1) * (np.abs(np.random.normal(0, 1))) ** (1 / beta)
+        new_nest[i] = int((nest[i] + step) % M)  # Perturb the job-machine assignment
+    return new_nest
+
+# Main Cuckoo Search algorithm
+def cuckoo_search():
+    nests = initialize_nests()
+    best_nest = nests[0]
+    best_fitness = calculate_makespan(best_nest)
+    
+    for iteration in range(max_iter):
+        for i in range(nests):
+            new_nest = levy_flight(nests[i])  # Apply Levy flight to generate a new nest
+            fitness_new_nest = calculate_makespan(new_nest)
+            
+            # Select the best nest
+            if fitness_new_nest < best_fitness:
+                best_fitness = fitness_new_nest
+                best_nest = new_nest
+                
+            # Replace nests with probability p_a
+            if random.random() < p_a:
+                nests[i] = new_nest
+                
+        print(f"Iteration {iteration}: Best Makespan = {best_fitness}")
+    
+    return best_nest, best_fitness
+
+# Run the algorithm
+best_schedule, best_makespan = cuckoo_search()
+print("Best schedule:", best_schedule)
+print("Best makespan:", best_makespan)
