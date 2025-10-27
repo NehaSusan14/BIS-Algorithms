@@ -4,36 +4,41 @@ import random
 # Define the problem: N jobs, M machines
 N = 5  # Number of jobs
 M = 3  # Number of machines
-job_times = np.array([[2, 3, 5], [3, 2, 4], [4, 6, 2], [3, 4, 3], [5, 7, 2]])  # job times on each machine
+job_times = np.array([
+    [2, 3, 5],
+    [3, 2, 4],
+    [4, 6, 2],
+    [3, 4, 3],
+    [5, 7, 2]
+])  # job times on each machine
 
 # Fitness function: Calculate the makespan (total time of the last job to finish)
 def calculate_makespan(schedule):
     machine_times = np.zeros(M)
     for job in range(N):
-        machine = int(schedule[job])  # Machine to which job is assigned
+        machine = int(schedule[job])
         machine_times[machine] += job_times[job][machine]
-    return max(machine_times)  # Makespan is the maximum time across machines
+    return max(machine_times)
 
 # Cuckoo Search Algorithm Parameters
-nests = 10  # Number of nests
-max_iter = 100  # Max iterations
-p_a = 0.25  # Probability of discovery (probability of replacing a nest)
+num_nests = 10   # ✅ renamed variable
+max_iter = 100
+p_a = 0.25
 
-# Initialize nests randomly (job assignments to machines)
+# Initialize nests randomly
 def initialize_nests():
-    nests = []
-    for i in range(nests):
-        # Randomly assign jobs to machines (machine numbers between 0 and M-1)
+    nest_list = []
+    for i in range(num_nests):
         schedule = np.random.randint(0, M, N)
-        nests.append(schedule)
-    return nests
+        nest_list.append(schedule)
+    return nest_list
 
-# Levy Flight: Generate a new solution by perturbing the current solution
+# Levy Flight: Generate a new solution by perturbing the current one
 def levy_flight(nest, beta=1.5):
     new_nest = nest.copy()
     for i in range(N):
         step = np.random.normal(0, 1) * (np.abs(np.random.normal(0, 1))) ** (1 / beta)
-        new_nest[i] = int((nest[i] + step) % M)  # Perturb the job-machine assignment
+        new_nest[i] = int((nest[i] + step) % M)
     return new_nest
 
 # Main Cuckoo Search algorithm
@@ -43,11 +48,10 @@ def cuckoo_search():
     best_fitness = calculate_makespan(best_nest)
     
     for iteration in range(max_iter):
-        for i in range(nests):
-            new_nest = levy_flight(nests[i])  # Apply Levy flight to generate a new nest
+        for i in range(num_nests):   # ✅ use num_nests here
+            new_nest = levy_flight(nests[i])
             fitness_new_nest = calculate_makespan(new_nest)
             
-            # Select the best nest
             if fitness_new_nest < best_fitness:
                 best_fitness = fitness_new_nest
                 best_nest = new_nest
@@ -56,11 +60,12 @@ def cuckoo_search():
             if random.random() < p_a:
                 nests[i] = new_nest
                 
-        print(f"Iteration {iteration}: Best Makespan = {best_fitness}")
+        print(f"Iteration {iteration+1}/{max_iter}: Best Makespan = {best_fitness}")
     
     return best_nest, best_fitness
 
-# Run the algorithm
+# Run algorithm
 best_schedule, best_makespan = cuckoo_search()
-print("Best schedule:", best_schedule)
+print("\nBest schedule:", best_schedule)
 print("Best makespan:", best_makespan)
+
