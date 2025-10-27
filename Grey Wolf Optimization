@@ -1,0 +1,98 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_blobs
+from sklearn.metrics import pairwise_distances_argmin_min
+
+# -------------------------------
+# Grey Wolf Optimizer (GWO)
+# -------------------------------
+
+def initialize_wolves(num_wolves, num_clusters, data_dim, data_bounds):
+    wolves = []
+    for _ in range(num_wolves):
+        wolf = np.array([
+            np.random.uniform(low=data_bounds[0][d], high=data_bounds[1][d], size=num_clusters)
+            for d in range(data_dim)
+        ]).T
+        wolves.append(wolf)
+    return np.array(wolves)
+
+
+def fitness(wolf, data):
+    """Compute the fitness of a wolf (mean distance to nearest centroid)."""
+    labels, distances = pairwise_distances_argmin_min(data, wolf)
+    return np.mean(distances)
+
+
+def gwo_clustering(data, num_clusters=3, num_wolves=20, max_iter=100):
+    data_dim = data.shape[1]
+    data_bounds = np.array([[np.min(data[:, d]), np.max(data[:, d])] for d in range(data_dim)]).T
+
+    wolves = initialize_wolves(num_wolves, num_clusters, data_dim, data_bounds)
+    fitness_values = np.array([fitness(w, data) for w in wolves])
+
+    idx = np.argsort(fitness_values)
+    alpha, beta, delta = wolves[idx[0]], wolves[idx[1]], wolves[idx[2]]
+
+    for t in range(max_iter):
+        a = 2 - 2 * (t / max_iter)  # linearly decreases from 2 to 0
+
+        for i in range(num_wolves):
+            for j in range(num_clusters):
+                for k in range(data_dim):
+                    r1, r2 = np.random.rand(), np.random.rand()
+                    A1 = 2 * a * r1 - a
+                    C1 = 2 * r2
+                    D_alpha = abs(C1 * alpha[j, k] - wolves[i][j, k])
+                    X1 = alpha[j, k] - A1 * D_alpha
+
+                    r1, r2 = np.random.rand(), np.random.rand()
+                    A2 = 2 * a * r1 - a
+                    C2 = 2 * r2
+                    D_beta = abs(C2 * beta[j, k] - wolves[i][j, k])
+                    X2 = beta[j, k] - A2 * D_beta
+
+                    r1, r2 = np.random.rand(), np.random.rand()
+                    A3 = 2 * a * r1 - a
+                    C3 = 2 * r2
+                    D_delta = abs(C3 * delta[j, k] - wolves[i][j, k])
+                    X3 = delta[j, k] - A3 * D_delta
+
+                    wolves[i][j, k] = (X1 + X2 + X3) / 3
+
+            wolves[i] = np.clip(wolves[i], data_bounds[0], data_bounds[1])
+
+        fitness_values = np.array([fitness(w, data) for w in wolves])
+        idx = np.argsort(fitness_values)
+        alpha, beta, delta = wolves[idx[0]], wolves[idx[1]], wolves[idx[2]]
+
+        if (t + 1) % 10 == 0 or t == 0:
+            print(f"Iteration {t+1}/{max_iter}, Best fitness: {fitness_values[idx[0]]:.4f}")
+
+    return alpha, fitness_values[idx[0]]
+
+
+# -------------------------------
+# Example + Visualization
+# -------------------------------
+if __name__ == "__main__":
+    # Create synthetic data (3 clusters)
+    data, _ = make_blobs(n_samples=300, centers=3, n_features=2, random_state=42)
+
+    # Run GWO Clustering
+    best_centroids, best_score = gwo_clustering(data, num_clusters=3, num_wolves=20, max_iter=100)
+
+    print("\nOptimized Centroids:\n", best_centroids)
+
+    # Assign points to nearest centroid
+    labels, _ = pairwise_distances_argmin_min(data, best_centroids)
+
+    # Plot results
+    plt.figure(figsize=(8, 6))
+    plt.scatter(data[:, 0], data[:, 1], c=labels, cmap='viridis', s=30, label='Data Points')
+    plt.scatter(best_centroids[:, 0], best_centroids[:, 1], c='red', marker='X', s=200, label='Centroids')
+    plt.title("Grey Wolf Optimizer (GWO) Clustering - 3 Clusters")
+    plt.xlabel("Feature 1")
+    plt.ylabel("Feature 2")
+    plt.legend()
+    plt.show()
