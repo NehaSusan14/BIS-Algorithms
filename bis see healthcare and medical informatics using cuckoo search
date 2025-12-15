@@ -1,0 +1,148 @@
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from google.colab import files
+import io
+import scipy.special as sps
+
+
+# 1. Load Dataset
+
+print("Upload 'diabetes.csv' …")
+uploaded = files.upload()
+if not uploaded:
+    raise Exception("No file uploaded")
+
+filename = list(uploaded.keys())[0]
+df = pd.read_csv(io.BytesIO(uploaded[filename]))
+print("Dataset shape:", df.shape)
+
+# Use a small subset
+df = df.head(100)
+
+X = df.drop("Outcome", axis=1).values.astype(np.float32)
+y = df["Outcome"].values.astype(np.float32)
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y, test_size=0.2, random_state=42
+)
+
+
+input_dim = X_train.shape[1]
+hidden_units = 8
+
+# Architecture: Input -> Dense(8) -> Dense(1)
+def unpack(weights, shapes):
+    """Convert flat vector → list of weight arrays."""
+    arrays = []
+    idx = 0
+    for shape in shapes:
+        length = np.prod(shape)
+        arrays.append(weights[idx:idx+length].reshape(shape))
+        idx += length
+    return arrays
+
+def pack(models_weights):
+    """Convert list of arrays → flat vector."""
+    return np.concatenate([w.flatten() for w in models_weights])
+
+# Define weight shapes
+weight_shapes = [
+    (input_dim, hidden_units),  # W1
+    (hidden_units,),            # b1
+    (hidden_units, 1),          # W2
+    (1,)                        # b2
+]
+vector_size = sum(np.prod(s) for s in weight_shapes)
+
+# Create untrained model to test
+def predict_with_weights(weights_vector, X):
+    W1, b1, W2, b2 = unpack(weights_vector, weight_shapes)
+    z1 = X.dot(W1) + b1
+    a1 = np.tanh(z1)
+    z2 = a1.dot(W2) + b2
+    pred = 1/(1+np.exp(-z2))
+    return (pred.flatten() > 0.5).astype(int)
+
+def fitness(weights):
+    preds = predict_with_weights(weights, X_train)
+    return 1 - np.mean(preds == y_train)  # minimize error
+
+# —————————————
+# 3. Cuckoo Search (optimize weights)
+# —————————————
+
+def levy_flight(beta, dim):
+    sigma_u = (sps.gamma(1+beta)*np.sin(np.pi*beta/2)/
+               (sps.gamma((1+beta)/2)*beta*2**((beta-1)/2)))**(1/beta)
+    u = np.random.randn(dim)*sigma_u
+    v = np.random.randn(dim)
+    return u/np.abs(v)**(1/beta)
+
+def cuckoo_search(n=15, pa=0.25, iters=10):
+    lb, ub = -1, 1  # bounds for weights
+    dim = vector_size
+
+    nests = np.random.uniform(lb, ub, (n, dim))
+    fitnesses = np.array([fitness(n) for n in nests])
+
+    best_idx = np.argmin(fitnesses)
+    best = nests[best_idx].copy()
+    best_fit = fitnesses[best_idx]
+
+    for _ in range(iters):
+        for i in range(n):
+            step = levy_flight(1.5, dim)
+            new = nests[i] + step*(nests[i]-best)
+            new = np.clip(new, lb, ub)
+            f_new = fitness(new)
+            if f_new < fitnesses[i]:
+                nests[i] = new
+                fitnesses[i] = f_new
+
+        # abandon some nests
+        mask = np.random.rand(n, dim) < pa
+        random_nests = np.random.uniform(lb, ub, (n, dim))
+        nests[mask] = random_nests[mask]
+        fitnesses = np.array([fitness(n) for n in nests])
+
+        idx = np.argmin(fitnesses)
+        if fitnesses[idx] < best_fit:
+            best_fit = fitnesses[idx]
+            best = nests[idx].copy()
+
+    return best, best_fit
+
+best_vector, best_score = cuckoo_search()
+print("Best fitness (train error):", best_score)
+
+# —————————————
+# 4. Evaluate Best Weights
+# —————————————
+
+
+train_preds = predict_with_weights(best_vector, X_train)
+test_preds = predict_with_weights(best_vector, X_test)
+
+train_acc = np.mean(train_preds == y_train)
+test_acc = np.mean(test_preds == y_test)
+
+print(f"Train accuracy (best weights): {train_acc:.4f}")
+print(f"Test accuracy (best weights): {test_acc:.4f}")
+
+# —————————————
+# 5. Extract Best Weights & Biases
+# —————————————
+
+W1, b1, W2, b2 = unpack(best_vector, weight_shapes)
+print("\n===== Best Weights & Biases ===telek=")
+print("W1:", W1)
+print("b1:", b1)
+print("W2:", W2)
+print("b2:", b2)
